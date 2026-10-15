@@ -50,7 +50,7 @@ lane at assembly, [`supply_audit.py`](proxy/supply_audit.py), is built and valid
 | Lane | Stable % | Anneal % | **Eff. % of 6T** | Tokens fed | Conf-adj supply (raw) | Epochs | Target benchmarks |
 |---|--:|--:|--:|--:|--:|--:|---|
 | English general web | 34 | 12 | **31.4** | 1.88T | 4.25T (5T) | 0.44 | MMLU, HellaSwag, ARC-C |
-| **Indic (4 tiers)** | 26 | 24 | **25.8** | 1.55T | 921B (1.25T) | 1.68 | MILU, IndicGenBench, IndicXTREME |
+| **Indic (4 tiers)** | 26 | 24 | **25.8** | 1.55T | 912B (1.23T) | 1.70 | MILU, IndicGenBench, IndicXTREME |
 | Code | 12 | 14 | **12.2** | 734B | 620B (775B) | 1.18 | HumanEval, MBPP |
 | Reference / knowledge | 9 | 0 | **7.9** | 475B | 262B (350B) | 1.81 | MMLU, TriviaQA, GPQA |
 | Math & STEM | 6 | 18 | **7.4** | 446B | 140B (200B) | 3.19 | GSM8K, MATH |
@@ -67,7 +67,7 @@ lane at assembly, [`supply_audit.py`](proxy/supply_audit.py), is built and valid
 reasoning (13× the confidence-adjusted supply) and agentic (163×) lanes ask for far more tokens than any
 real corpus can supply, so they are declared synthetic-first, not pretend-real. Every other
 whole lane sits under the 4-epoch ceiling — but inside the Indic lane, the **verified tier
-crosses it at 6.0 epochs** once the supply-confidence discount is applied (§2), which is the single most
+crosses it at 6.9 epochs** once the supply-confidence discount is applied (§2), which is the single most
 important number in this plan.
 
 **Why these numbers, defended briefly.**
@@ -96,28 +96,29 @@ the web-crawled unverified tier, where near-duplication is heaviest.
 
 | Tier | Share of Indic | Tokens fed | Conf-adj supply (raw · conf) | Epochs | Primary sources |
 |---|--:|--:|--:|--:|---|
-| **Verified** | 28% | 433B | 72B (103B · 0.70) | **6.00 ⚠️** | Sangraha-Verified (64.3B) + IndicCorp v2 (~21B) + Indic Wikipedia / curated news, gov, textbooks (~18B) |
+| **Verified** | 28% | 433B | 63B (90B · 0.70) | **6.87 ⚠️** | Sangraha Indic-verified (~51.5B — the card's 64.3B *includes 12.76B English*) + IndicCorp v2 (~21B) + Indic Wikipedia / curated news, gov, textbooks (~18B) |
 | **Unverified** | 24% | 371B | 240B (400B · 0.60) | 1.55 | Sangraha-Unverified (24.3B) + Indic FineWeb-2 / CulturaX / MADLAD / HPLT |
 | **Translated** | 22% | 340B | 289B (340B · 0.85) | 1.18 | EN→Indic MT of high-quality English (textbooks, FineWeb-Edu, reasoning traces) |
 | **Synthetic** | 26% | 402B | 322B (402B · 0.80) | 1.25 | Sangraha-Synthetic (162.7B; translated-wiki + romanized) + model-generated Indic QA / CoT / code-switched |
 
 **The one number a reviewer should push on, and the honest answer.** Verified Indic is the
-binding constraint of the entire model. Only ~64B verified tokens exist in the largest
-curated corpus (Sangraha-Verified); adding IndicCorp v2, Indic Wikipedia and curated
-sources brings the raw pool to ~103B, and after cross-source dedup only **~72B is truly
-unique**. To give verified Indic 433B tokens we would therefore run it at **6.0 epochs —
-clearly past the safe ceiling.** The plan does not pretend otherwise: it treats 6.0 as a
-*deficit to be closed by cleaning*, not an acceptable operating point. It is also *why the
-budget is 6T and not 12T*: at 12T the verified tier would need ~12 epochs, which is
-indefensible. **Verified Indic supply, not GPU count, is what caps V5.** The cleaning
-program (§9) is pointed straight at this: promote cleaned unverified text through the
-verification pipeline to grow the usable pool from ~72B toward **~108B (raw ~155B)**, which
-brings verified back to the 4-epoch ceiling; the empirical justification for treating 4
-epochs as the line is in §8.1.
+binding constraint of the entire model. The largest curated corpus (Sangraha) lists 64.3B
+"verified" tokens, but **12.76B of that is English** — true Indic-verified is only ~51.5B.
+Adding IndicCorp v2 (~21B) and Indic Wikipedia / curated sources (~18B) brings the raw pool
+to ~90B, and after cross-source dedup only **~63B is truly unique**. To give verified Indic
+433B tokens we would therefore run it at **6.9 epochs — clearly past the safe ceiling.** The
+plan does not pretend otherwise: it treats 6.9 as a *deficit to be closed by cleaning*, not
+an acceptable operating point. It is also *why the budget is 6T and not 12T*: at 12T the
+verified tier would need ~11 epochs, which is indefensible. **Verified Indic supply, not GPU
+count, is what caps V5.** The cleaning program (§9) is pointed straight at this: promote
+cleaned unverified text through the verification pipeline to grow the usable pool from ~63B
+toward **~108B (raw ~155B)**, which brings verified back to the 4-epoch ceiling; the
+empirical justification for treating 4 epochs as the line is in §8.1.
 
-Note the supply-confidence discount *worsens* verified from a comfortable-looking 4.2 to a
-can't-ignore-it 6.0 — this is the whole point of the discount: it stops the plan from hiding
-a real deficit behind a raw dataset-card number.
+Note the supply-confidence discount *worsens* verified from a pre-discount 4.8 to a
+can't-ignore-it 6.9 — this is the whole point of the discount: it stops the plan from hiding
+a real deficit behind a raw dataset-card number. The per-language view (§2.2) makes it
+worse still, because verified cannot be pooled across languages.
 
 The translated and synthetic tiers are *not* supply-constrained — you can always translate
 or generate more — so their caps (22% and 26%) are set by **quality risk, not scarcity**:
@@ -170,6 +171,60 @@ that tokenizer* — a caveat, since dataset-card token counts use their own toke
 supply figures are re-derived under ours at assembly time (a readiness-gate item, §11);
 (3) the supply-confidence discount and the token tax are independent multipliers on the same
 raw text, and the reconciler keeps them separate so neither hides the other.
+
+### 2.2 The per-language Indic split (the deeper cut)
+
+The four tiers above are still an *aggregate* over 22 languages, and a reviewer's next
+question is the obvious one: how is the 1.55T Indic budget split *across languages*, and can
+each language's share actually be sourced? Supply is overwhelmingly Hindi/Bengali-skewed and
+fertility differs ~2× across scripts, so a single Indic number hides exactly the kind of
+wishful accounting the tier split was meant to expose. This section does for languages what
+§2 did for tiers.
+
+**Allocation rule.** Target token share per language `p_i ∝ (real_i)^α` — temperature
+sampling with **α = 0.30** (T≈3.3, as in XLM-R / mBERT / NLLB) over *real* (verified +
+unverified) Sangraha supply, so synthetic (generated-to-order) does not drive proportions.
+A **0.5% per-language floor** guarantees coverage of all 22; then each language is checked
+against the **4-epoch ceiling on its own verified supply**. Full 15-row table and chart:
+[`proxy/results/per_language_ledger.md`](proxy/results/per_language_ledger.md),
+[`per_language_indic.png`](proxy/results/per_language_indic.png). Condensed:
+
+| Language | Target share | Target tokens | Fertility | Verified epochs @28% | Max verified share @≤4ep |
+|---|--:|--:|--:|--:|--:|
+| Hindi | 12.3% | 190B | 1.23 | 6.0 | **19%** |
+| Bengali | 10.8% | 167B | 1.74 | 6.3 | 18% |
+| Tamil | 7.8% | 121B | 2.12 | 12.1 | 9% |
+| Telugu | 7.3% | 113B | 1.88 | 12.1 | 9% |
+| Marathi | 6.8% | 105B | 1.63 | 14.9 | 8% |
+| Malayalam | 6.7% | 103B | 2.30 | 15.1 | 7% |
+| Odia | 4.9% | 76B | 1.65 | 26.0 | 4% |
+| Assamese | 3.3% | 51B | 1.85 | 69.7 | 2% |
+| Rest (8 langs) | 3.2% | 50B | ~2.5 | 68.4 | 2% |
+
+![per-language Indic](proxy/results/per_language_indic.png)
+
+**What the per-language view reveals — and it is worse than the aggregate.**
+
+1. **No language can back the flat 28% verified tier at ≤4 epochs.** The per-language verified
+   ceiling runs from ~19% (Hindi) down to ~2% (low-resource). The actionable fix is to
+   replace the single 28% with a **per-language verified cap** = each language's "Max verified
+   share" column; everything above it is explicitly translated + synthetic.
+2. **The aggregate was optimistic twice over.** The §2 pooled view says 28% verified needs
+   6.9 epochs, so ~16% is backable at the ceiling. But pooling implicitly lets Hindi's surplus
+   back Odia's demand, which is not real — you cannot train Odia on Hindi tokens. Once each
+   language's verified demand must come from *its own* verified supply, the backable share
+   drops to **~9%**. Per-language matching is the honest number.
+3. **Low-resource languages are structurally synthetic-first**, not by choice but by supply:
+   Assamese, Odia, Punjabi and the eight-language "rest" have so little verified text that
+   even a floored share runs 25–70 verified-epochs, so ≥90% of their allocation must be
+   translated or synthetic. This sharpens where translation/synthesis investment goes.
+4. **Fertility compounds it.** High-fertility scripts (Malayalam 2.30, Kannada 2.19, Sanskrit
+   2.59) spend more of their token budget per unit of content, so their *content* share is
+   below their token share (§2.1) — a second axis on which low-resource languages lose.
+
+α is itself a hypothesis: it trades head-language depth (Hindi's natural ~33% share) against
+low-resource coverage (flattened here to 12%); a production India-first model would fold in
+speaker population, and a proxy arm can test the setting.
 
 ---
 
@@ -224,7 +279,7 @@ instantaneous mixture must satisfy:**
 | Floor | Minimum instantaneous share | Rationale |
 |---|--:|---|
 | Indic (all tiers) | **≥ 18%** | Protect the India-first mission from an English-greedy selector |
-| Indic **verified** | **≥ 5%** of total | Never let the highest-value tier be zeroed out |
+| Indic **verified** | **≥ 4.2%** of total (supply-pinned) | A flat ≥5% would force ≥300B verified = 4.8 epochs on 63B usable — breaking the plan's own 4-epoch ceiling. So the floor is defined as `min(5%, 4 × usable-verified ÷ budget)` = **4.2% today**, and rises toward 5% only as cleaning lifts usable-verified to ≥75B. The floor can never command more than 4 epochs. |
 | English general web | ≥ 22% | Protect the reasoning/knowledge substrate |
 | Code | ≥ 7% | Cheap to lose, expensive to relearn; load-bearing for reasoning |
 | Math + Reasoning (combined) | ≥ 6% | Prevent CoT capability collapse mid-run |
@@ -355,8 +410,9 @@ Output (see [`proxy/results/lane_ledger.md`](proxy/results/lane_ledger.md) and
 - Effective lane shares sum to exactly 100% of 6T (assertion-checked).
 - **Reasoning** demands 13× its confidence-adjusted supply (~25B) → flagged, redefined as synthetic-first.
 - **Agentic** demands 163× its confidence-adjusted supply (~1B) → flagged, redefined as ~95% synthetic.
-- **Indic verified** demands 6.0 epochs on ~72B confidence-adjusted supply → the binding constraint;
-  drives the cleaning target.
+- **Indic verified** demands 6.9 epochs on ~63B confidence-adjusted supply → the binding constraint;
+  drives the cleaning target. Per-language (§2.2) it is worse: only ~9% of the Indic lane is
+  real-verified-backable once verified must be matched language-by-language.
 - Every other whole lane sits under 4 epochs.
 
 ### 8.1 Tier-blend probe — why the Indic tiers are *capped*, and where
@@ -401,7 +457,7 @@ cd proxy && python3 tier_blend_probe.py   # ~90s CPU, seed 0, no network
 
 Full write-up: [`proxy/results/tier_blend_results.md`](proxy/results/tier_blend_results.md).
 
-*Caveat (stated, not hidden):* a ~22k-parameter toy far below 40B; the exact optima are
+*Caveat (stated, not hidden):* a ~23k-parameter toy far below 40B; the exact optima are
 regime-dependent. It is offered as directional evidence for the *unrun* 1B/3B arms, not as
 the final caps — those are confirmed at scale by A2.
 
@@ -434,9 +490,12 @@ The mixture is only as trustworthy as the cleaned tokens behind it, and the acco
 names precisely which slots are starved, so cleaning is redirected there rather than spread
 evenly:
 
-1. **Verified Indic (highest priority).** Grow the *confidence-adjusted supply* verified pool from ~72B
+1. **Verified Indic (highest priority).** Grow the *confidence-adjusted supply* verified pool from ~63B
    toward **~108B (raw ~155B)** by running cleaned unverified/crawled Indic text through the
-   verification pipeline, which brings verified from 6.0 epochs back to the 4-epoch ceiling.
+   verification pipeline, which brings verified from 6.9 epochs back to the 4-epoch ceiling.
+   Prioritise the languages the per-language ledger (§2.2) flags as most verified-starved —
+   cleaning Hindi/Bengali crawl lifts the two largest lanes, and sourcing verified Odia /
+   Assamese / Punjabi raises the languages stuck near a 2–4% verified ceiling.
    Concrete quality gates the pipeline enforces: **language-ID confidence ≥ 0.90** per
    document (fastText/CLD3-class scorer), a **near-duplicate cluster policy** that keeps one
    exemplar per MinHash/SemDedup cluster, a quality-classifier threshold, and toxicity/PII
@@ -446,7 +505,7 @@ evenly:
    to the *generators and their seeds*: deduplicate and answer-verify generated traces,
    filter collapsed/degenerate outputs, and keep an execution check for tool-use. The unit
    of cleaning here is "verified-correct synthetic trace," not "crawled document."
-3. **Math & STEM.** Second-tier priority (2.2 epochs) — extend by cleaning Nemotron-CC-Math
+3. **Math & STEM.** Second-tier priority (3.19 epochs) — extend by cleaning Nemotron-CC-Math
    and OpenWebMath-class sources and by translating high-quality math into Indic (feeds both
    the math lane and the Indic translated tier).
 
@@ -463,10 +522,14 @@ The cumulative cleaning target is set against these three, in this order.
   analysis.
 - **Agentic lane not worth it.** If A3 shows 2.7% synthetic agentic ≈ 0.5%, the lane is a
   waste; cut to floor.
-- **Budget sensitivity.** Even at 6T the verified-Indic tier is already at 6.0 epochs after
-  the supply-confidence discount; at 10T it would be ~10 epochs. The plan therefore *depends on* the
+- **Budget sensitivity.** Even at 6T the verified-Indic tier is already at 6.9 epochs after
+  the supply-confidence discount; at 10T it would be ~11 epochs. The plan therefore *depends on* the
   cleaning program closing the verified deficit, or on a smaller verified share. This is
   stated, not hidden.
+- **Per-language verified matching.** The aggregate 28% verified is only ~9% real-backable
+  once each language draws on its own verified supply (§2.2). If cleaning stalls, the fallback
+  is explicit: cap each language's verified tier at its measured ceiling and let translated +
+  synthetic carry the remainder — not a silent aggregate 28% that no language can meet.
 
 ---
 
@@ -513,10 +576,12 @@ measured one.
     └── results/
         ├── lane_ledger.md          # per-lane demand vs confidence-adjusted supply (auto-generated)
         ├── indic_tier_ledger.md    # Indic 4-tier accounting (auto-generated)
+        ├── per_language_ledger.md  # Indic split across 22 languages (auto-generated, §2.2)
         ├── tier_blend_results.md   # blend-sweep table + takeaway (auto-generated)
         ├── supply_audit.md         # auditor validation report (auto-generated)
         ├── lane_headroom.png       # figure in §1
         ├── curriculum_ramps.png    # figure in §6
+        ├── per_language_indic.png  # figure in §2.2
         └── tier_blend_curve.png    # figure in §8.1
 ```
 

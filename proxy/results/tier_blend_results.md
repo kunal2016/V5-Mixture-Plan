@@ -31,6 +31,6 @@ Synthetic share `s`: s=0 fills the whole budget by repeating the scarce verified
 ## Takeaway for the mixture
 - The optimum is **interior in both regimes** — a bounded blend beats both repeating scarce verified to death (s=0) and going all-synthetic (s=1). This is the empirical basis for the plan giving verified, unverified, translated and synthetic each a *capped* share rather than betting the Indic lane on any single tier.
 - The optimal synthetic share **moves with quality**: s*=0.90 when synthetic is good vs s*=0.75 when it is poor. That is exactly why the plan sets tier caps by *quality risk*, and why proxy arm A2 (verified-only vs +synthetic) is the gate that fixes the real Indic caps at 1B/3B scale.
-- Pure-verified-repeated is never optimal here, which corroborates treating the verified tier's 6.0-epoch demand (see the ledger) as a deficit to close by cleaning, not an operating point.
+- Pure-verified-repeated is never optimal here, which corroborates treating the verified tier's 6.9-epoch demand (see the ledger) as a deficit to close by cleaning, not an operating point.
 
-*Caveat:* a ~12k-parameter toy far below 40B; offered as directional evidence for the unrun 1B/3B arms, not as the final caps.
+*Caveat:* a ~23k-parameter toy far below 40B; offered as directional evidence for the unrun 1B/3B arms, not as the final caps.

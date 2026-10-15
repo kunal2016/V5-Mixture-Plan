@@ -74,6 +74,7 @@ def entropy_floor(T, stream):
 # 2. NPLM.
 # --------------------------------------------------------------------------
 CTX, D, Hd, BS, STEPS = 3, 32, 128, 256, 1500
+N_PARAMS = V*D + (CTX*D)*Hd + Hd + Hd*V + V     # NPLM param count (E + W1,b1 + W2,b2)
 TOTAL = BS * STEPS                       # fixed compute (tokens seen) per arm
 VERIFIED_UNIQUE = 32000                  # the scarce verified pool (s=0 -> 12x repeat)
 
@@ -204,10 +205,10 @@ md += ["## Takeaway for the mixture",
        f"plan sets tier caps by *quality risk*, and why proxy arm A2 (verified-only vs "
        f"+synthetic) is the gate that fixes the real Indic caps at 1B/3B scale.",
        f"- Pure-verified-repeated is never optimal here, which corroborates treating the "
-       f"verified tier's 6.0-epoch demand (see the ledger) as a deficit to close by "
+       f"verified tier's 6.9-epoch demand (see the ledger) as a deficit to close by "
        f"cleaning, not an operating point.\n",
-       "*Caveat:* a ~12k-parameter toy far below 40B; offered as directional evidence "
-       "for the unrun 1B/3B arms, not as the final caps.\n"]
+       f"*Caveat:* a ~{N_PARAMS/1000:.0f}k-parameter toy far below 40B; offered as directional "
+       "evidence for the unrun 1B/3B arms, not as the final caps.\n"]
 with open(os.path.join(RES, "tier_blend_results.md"), "w") as f:
     f.write("\n".join(md))
 

@@ -5,7 +5,7 @@ Total budget **6.0T tokens** | anneal reserve **12%** (720B) | safe repetition c
 | Lane | Stable % | Anneal % | Eff % of 6T | Tokens fed (B) | Raw supply (B) | Confidence | Conf-adj supply (B) | Epochs | Verdict |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|:--|
 | English general web | 34 | 12 | 31.36 | 1882 | 5000 | 0.85 | 4250 | 0.44 | ✅ OK |
-| Indic (all tiers) | 26 | 24 | 25.76 | 1546 | 1245 | 0.74 | 921 | 1.68 | ✅ OK |
+| Indic (all tiers) | 26 | 24 | 25.76 | 1546 | 1232 | 0.74 | 912 | 1.70 | ✅ OK |
 | Code | 12 | 14 | 12.24 | 734 | 775 | 0.80 | 620 | 1.18 | ✅ OK |
 | Reference / knowledge | 9 | 0 | 7.92 | 475 | 350 | 0.75 | 262 | 1.81 | ✅ OK |
 | Math & STEM | 6 | 18 | 7.44 | 446 | 200 | 0.70 | 140 | 3.19 | ✅ OK |

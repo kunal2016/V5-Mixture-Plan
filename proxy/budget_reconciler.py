@@ -51,7 +51,7 @@ os.makedirs(RES, exist_ok=True)
 lanes = [
     # name                     stable% anneal%  raw_B  conf  supply_note
     ("English general web",       34.0,  12.0,  5000.0, 0.85, "FineWeb 15T / DCLM-baseline 3.8T; high-quality subset"),
-    ("Indic (all tiers)",         26.0,  24.0,  1245.0, 0.74, "sum of the four tiers below; blended discount"),
+    ("Indic (all tiers)",         26.0,  24.0,  1232.0, 0.74, "sum of the four tiers below; blended discount"),
     ("Code",                      12.0,  14.0,   775.0, 0.80, "The Stack v2 dedup ~775B; further near-dup/license filtering"),
     ("Reference / knowledge",      9.0,   0.0,   350.0, 0.75, "books, Wikipedia, arXiv, S2ORC (est.)"),
     ("Math & STEM",                6.0,  18.0,   200.0, 0.70, "Nemotron-CC-Math 133B + OpenWebMath/FineMath (est.)"),
@@ -87,7 +87,7 @@ indic_lane = next(r for r in rows if r["name"].startswith("Indic"))
 INDIC_CONSUMED = indic_lane["consumed"]         # ~1.55T
 tiers = [
     # tier         share%  raw_B  conf  supply_note
-    ("Verified",     28.0,  103.0, 0.70, "Sangraha-Verified 64.3B + IndicCorp v2 ~21B + Indic Wikipedia/curated ~18B; cross-source dup"),
+    ("Verified",     28.0,   90.0, 0.70, "Sangraha Indic-verified 51.5B (card's 64.3B MINUS 12.76B English) + IndicCorp v2 ~21B + Indic Wikipedia/curated ~18B; cross-source dup"),
     ("Unverified",   24.0,  400.0, 0.60, "Sangraha-Unverified 24.3B + Indic FineWeb-2 / CulturaX / MADLAD / HPLT; heavy near-dup so steepest discount"),
     ("Translated",   22.0,  340.0, 0.85, "EN->Indic MT of high-quality EN; near-unique by construction, capped for quality"),
     ("Synthetic",    26.0,  402.0, 0.80, "Sangraha-Synthetic 162.7B + model-generated Indic QA/CoT/romanized; dedup of generations"),
@@ -217,3 +217,157 @@ for t in tier_rows:
     mark = "" if t["status"]=="OK" else "  <-- WISHFUL"
     print(f"  {t['name']:11s} {t['share']:.0f}%  {t['consumed']:.0f}B / {t['uniq']:.0f}B conf-adj = {t['epochs']:.2f} epochs{mark}")
 print("\nwrote results/ -> lane_ledger.md, indic_tier_ledger.md, lane_headroom.png, curriculum_ramps.png")
+
+# --------------------------------------------------------------------------
+# 7. Per-language Indic split (capstone deepening).
+#    The Indic lane (INDIC_CONSUMED tokens) is split across the 22 scheduled
+#    languages, not just the 4 tiers. Allocation rule:
+#      q_i   = real_i / sum(real)                 natural proportion
+#              real_i = Sangraha verified_i + unverified_i  (genuinely-sourced;
+#              synthetic is generated-to-order so it does NOT drive proportions)
+#      p_i  ~ q_i ** ALPHA                         temperature sampling (ALPHA=0.3,
+#              i.e. T~3.3; flattens the Hindi-heavy head toward low-resource langs,
+#              as in XLM-R / mBERT / NLLB)
+#      then a per-language FLOOR guarantees coverage, and we renormalise.
+#    Each language is then checked against the 4-epoch ceiling on its VERIFIED
+#    supply: how much of the 28% verified-tier target can it actually back from
+#    real verified tokens at <=4 epochs? The shortfall is necessarily synthetic/
+#    translated. This surfaces, per language, exactly how synthetic-dependent it is.
+#    Sangraha per-language token counts (millions), Indic only (English excluded).
+#    Fertility = IndicSuperTokenizer tokens/word (arXiv 2511.03237 Table 3).
+ALPHA = 0.30
+FLOOR_SHARE = 0.005          # >=0.5% of the Indic lane per scheduled language
+CONF_V = 0.70                # verified-tier supply-confidence (matches the tier table)
+TIER_V = 0.28                # verified tier target share of the Indic lane
+
+#               name          verified_M  unverified_M  fertility
+INDIC_LANG = [
+    ("Hindi",       12617.3, 12348.3, 1.23),
+    ("Bengali",     10604.4,  5608.8, 1.74),
+    ("Tamil",        3985.1,  1515.9, 2.12),
+    ("Urdu",         3658.1,  1328.2, 1.44),
+    ("Telugu",       3706.8,   647.4, 1.88),
+    ("Gujarati",     3647.9,   597.0, 1.77),
+    ("Marathi",      2827.0,   652.1, 1.63),
+    ("Malayalam",    2730.8,   547.8, 2.30),
+    ("Nepali",       1822.5,   485.5, 1.62),
+    ("Kannada",      1778.3,   388.8, 2.19),
+    ("Sanskrit",     1329.0,     9.8, 2.59),
+    ("Punjabi",      1075.3,   136.9, 1.39),
+    ("Odia",         1177.1,    23.7, 1.65),
+    ("Assamese",      292.1,    17.5, 1.85),
+    # Sindhi 258.2 + Maithili 14.6 + Konkani 10.1 + Manipuri 7.4 + Bodo 1.5
+    #  + Kashmiri 0.5 + Santali 0.3 + Dogri 0.06
+    ("Rest (8 langs)", 292.66,   0.0, 2.50),
+]
+
+real = [v + u for (_, v, u, _f) in INDIC_LANG]
+sum_real = sum(real)
+# temperature-smoothed shares
+tw = [r ** ALPHA for r in real]
+p_temp = [wi / sum(tw) for wi in tw]
+# apply floor then renormalise
+p_floored = [max(pi, FLOOR_SHARE) for pi in p_temp]
+p = [pi / sum(p_floored) for pi in p_floored]
+
+lang_rows = []
+for (name, ver_M, unv_M, fert), q_real, share in zip(
+        INDIC_LANG, [r / sum_real for r in real], p):
+    tokens_b = share * INDIC_CONSUMED                 # B tokens allocated
+    usable_ver_b = (ver_M / 1000.0) * CONF_V          # B usable verified tokens
+    # verified epochs if we insisted on the full 28% verified tier for this language
+    vep = (TIER_V * tokens_b) / usable_ver_b if usable_ver_b > 0 else float("inf")
+    # the most verified SHARE this language can back at <=4 epochs
+    max_ver_share = min(TIER_V, (SAFE_EPOCHS * usable_ver_b) / tokens_b) if tokens_b > 0 else 0.0
+    synth_trans_floor = TIER_V - max_ver_share        # gap that must be synth/translated
+    verdict = "verified-OK" if max_ver_share >= TIER_V - 1e-9 else "synthetic-lean"
+    lang_rows.append(dict(name=name, ver_M=ver_M, unv_M=unv_M, fert=fert,
+                          real_b=(ver_M + unv_M) / 1000.0, q_real=q_real,
+                          share=share, tokens_b=tokens_b, usable_ver_b=usable_ver_b,
+                          vep=vep, max_ver_share=max_ver_share,
+                          synth_trans_floor=synth_trans_floor, verdict=verdict))
+
+# content-weighted share (fertility-adjusted): content_i ~ tokens_i / fertility_i
+content_raw = [r["tokens_b"] / r["fert"] for r in lang_rows]
+sum_content = sum(content_raw)
+for r, c in zip(lang_rows, content_raw):
+    r["content_share"] = c / sum_content
+
+# ---- write per-language ledger ----
+pl = ["# Per-language Indic ledger (auto-generated by budget_reconciler.py)\n",
+      f"Indic lane = **{INDIC_CONSUMED:.0f}B tokens**, split across 22 scheduled "
+      f"languages. Rule: temperature sampling (alpha={ALPHA}) on real "
+      f"(verified+unverified) Sangraha supply, a {FLOOR_SHARE*100:.1f}% per-language "
+      f"floor, then each language checked against the 4-epoch ceiling on its VERIFIED "
+      f"supply (tier target {TIER_V*100:.0f}%). Sangraha English (12.76B) excluded.\n",
+      "| Language | Real V+U (B) | Verified (B) | Fertility | Target share | "
+      "Target tokens (B) | Content share | Verified epochs @28% | Max verified share @<=4ep | Verdict |",
+      "|---|--:|--:|--:|--:|--:|--:|--:|--:|:--|"]
+for r in lang_rows:
+    vepx = "inf" if r["vep"] == float("inf") else f"{r['vep']:.1f}"
+    flag = "OK" if r["verdict"] == "verified-OK" else "**synthetic-lean**"
+    pl.append(f"| {r['name']} | {r['real_b']:.1f} | {r['ver_M']/1000:.2f} | "
+              f"{r['fert']:.2f} | {r['share']*100:.1f}% | {r['tokens_b']:.0f} | "
+              f"{r['content_share']*100:.1f}% | {vepx} | {r['max_ver_share']*100:.0f}% | {flag} |")
+tot_tokens = sum(r["tokens_b"] for r in lang_rows)
+# token-weighted verified share actually backable from real verified at <=4 epochs
+agg_ver_backable = sum(r["max_ver_share"] * r["tokens_b"] for r in lang_rows) / tot_tokens
+pl.append(f"| **Total** | {sum_real/1000:.1f} | {sum(r['ver_M'] for r in lang_rows)/1000:.1f} "
+          f"| - | {sum(r['share'] for r in lang_rows)*100:.0f}% | {tot_tokens:.0f} | 100% | - | "
+          f"**{agg_ver_backable*100:.0f}%** | - |")
+n_lean = sum(1 for r in lang_rows if r["verdict"] != "verified-OK")
+pl += ["",
+       f"**The headline finding.** At a flat 28% verified tier, *no* language can be fully "
+       f"verified-backed at <=4 epochs — the per-language ceiling runs from ~{lang_rows[0]['max_ver_share']*100:.0f}% "
+       f"(Hindi) down to ~{lang_rows[-1]['max_ver_share']*100:.0f}% (low-resource). Token-weighted, only "
+       f"**~{agg_ver_backable*100:.0f}% of the Indic lane is real-verified-backable** today; the single "
+       f"'28% verified' in the aggregate tier table is optimistic. The actionable fix is a "
+       f"**per-language verified cap** (the 'Max verified share' column): each language's verified "
+       f"tier is set to what its real supply can sustain, and the remainder is explicitly "
+       f"translated + synthetic. Low-resource languages are therefore *structurally* "
+       f"synthetic-first; only data-rich Hindi/Bengali approach a verified-backed tier.",
+       "",
+       f"**And the aggregate was optimistic twice over.** The §2 pooled view says 28% verified "
+       f"needs 6.87 epochs, so only ~{SAFE_EPOCHS/6.87*28:.0f}% is backable at the ceiling. But that "
+       f"treats verified as one pool — it implicitly lets Hindi's surplus back Odia's demand, which "
+       f"is not real. Once each language's verified demand must be met by *that language's* verified "
+       f"supply, the backable share drops further to **~{agg_ver_backable*100:.0f}%**. Per-language "
+       f"matching is the stricter, honest number. Growing verified supply via cleaning (README §9) "
+       f"lifts every language's ceiling together.",
+       "",
+       f"*Allocation knob:* alpha={ALPHA} (temperature sampling) flattens Hindi from its "
+       f"~{lang_rows[0]['q_real']*100:.0f}% natural share to {lang_rows[0]['share']*100:.0f}% for "
+       f"low-resource coverage; a production India-first model may fold in speaker population. "
+       f"alpha is itself a hypothesis a proxy arm can test.",
+       "",
+       "*Supply: Sangraha per-language (AI4Bharat). Fertility: IndicSuperTokenizer Table 3 "
+       "(arXiv 2511.03237). 'Rest' = Sindhi, Maithili, Konkani, Manipuri, Bodo, Kashmiri, "
+       "Santali, Dogri. Sangraha English (12.76B) excluded from verified.*"]
+w("per_language_ledger.md", "\n".join(pl) + "\n")
+
+# ---- chart: allocated tokens vs verified-backable ceiling, per language ----
+fig, ax = plt.subplots(figsize=(10, 6.5))
+names = [r["name"] for r in lang_rows]
+yy = range(len(names))
+demand = [r["tokens_b"] for r in lang_rows]
+ver_ceiling = [SAFE_EPOCHS * r["usable_ver_b"] for r in lang_rows]   # max verified tokens @4ep
+cols = ["#c0392b" if r["verdict"] != "verified-OK" else "#2e86c1" for r in lang_rows]
+ax.barh([i+0.2 for i in yy], demand, height=0.4, color=cols, label="Allocated tokens")
+ax.barh([i-0.2 for i in yy], ver_ceiling, height=0.4, color="#aab7b8",
+        label="Verified-backable ceiling (4 x usable verified)")
+ax.set_yticks(list(yy)); ax.set_yticklabels(names)
+ax.set_xscale("log"); ax.set_xlabel("Billions of tokens (log scale)")
+ax.set_title("Per-language Indic: allocation vs. verified-backable ceiling\n"
+             "(red = verified-starved -> must be synthetic/translated)")
+ax.invert_yaxis(); ax.legend(loc="lower right", fontsize=8)
+plt.tight_layout(); plt.savefig(os.path.join(RES, "per_language_indic.png"), dpi=130)
+plt.close()
+
+# ---- console summary ----
+print("\nPER-LANGUAGE Indic split (alpha=%.2f, floor=%.1f%%):" % (ALPHA, FLOOR_SHARE*100))
+for r in lang_rows:
+    vepx = "inf" if r["vep"] == float("inf") else f"{r['vep']:4.1f}"
+    print(f"  {r['name']:14s} share {r['share']*100:4.1f}%  tokens {r['tokens_b']:5.0f}B  "
+          f"vepochs@28% {vepx}  maxVer {r['max_ver_share']*100:2.0f}%  {r['verdict']}")
+print(f"  -> {n_lean}/{len(lang_rows)} languages verified-starved")
+print("wrote results/ -> per_language_ledger.md, per_language_indic.png")
